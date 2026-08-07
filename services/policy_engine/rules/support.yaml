@@ -1,0 +1,7 @@
+# T0 — read-only or fully reversible, no financial exposure. Auto-execute.
+- id: SUPPORT-POL-1.0
+  when:
+    action: {in: [send_templated_reply, tag_ticket, summarize_issue, lookup_status, create_internal_task, update_contact_details]}
+  then: AUTO_EXECUTE
+  tier: T0
+  reason: "This action only reads data or makes a fully reversible, non-financial update, so it is executed automatically."

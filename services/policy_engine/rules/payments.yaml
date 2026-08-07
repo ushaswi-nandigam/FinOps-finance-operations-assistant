@@ -1,0 +1,8 @@
+# T0/T1 — retrying a failed payment moves no new money; it either succeeds
+# (money the customer already authorised) or fails again with no side effect.
+- id: PAYMENTS-POL-1.0
+  when:
+    action: retry_payment
+  then: AUTO_EXECUTE
+  tier: T1
+  reason: "Retrying a failed payment does not move new money and is safe to auto-execute, sampled for post-hoc review."

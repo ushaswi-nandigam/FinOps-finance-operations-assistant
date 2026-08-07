@@ -1,0 +1,14 @@
+# Account-level actions outside the refund/fee/fraud groups.
+- id: ACCOUNT-POL-1.0
+  when:
+    action: unblock_card
+  then: AUTO_EXECUTE
+  tier: T1
+  reason: "Unblocking a card after a routine PIN-retry lock is low risk and reversible; auto-executed with sampled review (ACCOUNT-POL-1.0)."
+
+- id: ACCOUNT-POL-2.0
+  when:
+    action: {in: [freeze_account, unfreeze_account]}
+  then: DUAL_APPROVAL
+  tier: T3
+  reason: "Freezing or unfreezing an account is high-impact and requires dual approval (ACCOUNT-POL-2.0)."

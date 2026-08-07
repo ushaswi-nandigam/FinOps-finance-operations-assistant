@@ -1,0 +1,14 @@
+# FRAUD-POL-3.0/3.1 — holds always dual-approved; benign closures single-approved.
+- id: FRAUD-POL-3.0
+  when:
+    action: {in: [place_fraud_hold, lift_fraud_hold]}
+  then: DUAL_APPROVAL
+  tier: T3
+  reason: "Placing or lifting a fraud hold always requires dual approval, irrespective of amount (FRAUD-POL-3.0)."
+
+- id: FRAUD-POL-3.1
+  when:
+    action: close_fraud_case_benign
+  then: NEEDS_APPROVAL
+  tier: T2
+  reason: "Closing a fraud case as benign requires single ops approval and a documented reason (FRAUD-POL-3.1)."

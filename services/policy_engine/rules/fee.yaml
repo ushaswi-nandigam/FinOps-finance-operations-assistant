@@ -1,0 +1,26 @@
+# FEE-POL-1.1/1.2 — waiver caps differ by tier, so both rules match on
+# customer_tier as well as amount.
+- id: FEE-POL-1.1
+  when:
+    action: waive_fee
+    customer_tier: {in: [GOLD, PLATINUM]}
+    amount_inr: {lte: 1000}
+  then: NEEDS_APPROVAL
+  tier: T2
+  reason: "Fee waivers up to ₹1,000 for Gold/Platinum customers require single ops approval (FEE-POL-1.1)."
+
+- id: FEE-POL-1.2
+  when:
+    action: waive_fee
+    customer_tier: {in: [STANDARD, SILVER]}
+    amount_inr: {lte: 300}
+  then: NEEDS_APPROVAL
+  tier: T2
+  reason: "Fee waivers up to ₹300 for Standard/Silver customers require single ops approval (FEE-POL-1.2)."
+
+- id: FEE-POL-2.0
+  when:
+    action: waive_fee
+  then: NEEDS_APPROVAL
+  tier: T2
+  reason: "Fee waivers outside the standard per-tier cap require single ops approval, pending supervisor review (FEE-POL-2.0)."
