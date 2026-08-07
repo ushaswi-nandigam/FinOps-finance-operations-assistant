@@ -53,17 +53,17 @@ def test_scenario1_refund_status_query_fully_autonomous(db):
 
 def test_unknown_domain_agent_escalates_cleanly(db):
     row = db.execute(text("SELECT customer_ref FROM customers LIMIT 1")).mappings().first()
-    event_id = _make_ops_event(db, source="payment_event", customer_ref=row["customer_ref"], channel="webhook",
-                                raw_text="Payment event: status=FAILED, decline_code=CARD_EXPIRED, amount=₹500")
+    event_id = _make_ops_event(db, source="internal_ops", customer_ref=row["customer_ref"], channel="form",
+                                raw_text="Onboard new merchant MerchantX")
     db.flush()
 
     case = process_event(db, event_id)
     db.flush()
 
-    # Domain resolves to PAYMENTS via T0 rule, but no Payments Agent is wired
-    # up yet (that's the next build step) — must escalate, not crash.
+    # Domain resolves to INTERNAL_OPS via T0 rule, but no Internal Ops Agent
+    # is wired up yet (a later build step) — must escalate, not crash.
     assert case.status == CaseStatus.ESCALATE
-    assert "no agent" in (case.error or "").lower() or "payments" in (case.error or "").lower()
+    assert "no agent" in (case.error or "").lower() or "internal_ops" in (case.error or "").lower()
 
     decisions = db.execute(text("SELECT * FROM decision_records WHERE case_id = :id"), {"id": case.case_id}).mappings().all()
     assert len(decisions) == 1

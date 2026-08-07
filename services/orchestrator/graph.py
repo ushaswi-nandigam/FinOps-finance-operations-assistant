@@ -20,7 +20,9 @@ from services.common.config import settings
 from services.common.enums import CaseStatus, Domain, Outcome
 from services.common.schemas import ActorRecord, CaseState, CostRecord
 from services.mocks.crm import CRMAdapter
-from services.orchestrator.agents import support
+from services.mocks.payments import PaymentsAdapter
+from services.orchestrator.agents import payments, support
+from services.orchestrator.approvals import create_approval_requests
 from services.orchestrator.case_store import create_case, save_case
 from services.orchestrator.events import get_ops_event
 from services.orchestrator.verify import verify
@@ -29,9 +31,11 @@ from services.tools.executor import execute_tool
 from services.triage.cascade import triage
 from services.triage.schemas import TriageResult
 
-# Extended in later build steps as Payments/Fraud/InternalOps agents land.
-AGENT_HANDLERS = {Domain.SUPPORT: support.handle}
-AGENT_NAMES = {Domain.SUPPORT: support.NAME}
+# Extended in later build steps as Fraud/InternalOps agents land.
+AGENT_HANDLERS = {Domain.SUPPORT: support.handle, Domain.PAYMENTS: payments.handle}
+AGENT_NAMES = {Domain.SUPPORT: support.NAME, Domain.PAYMENTS: payments.NAME}
+
+MONEY_MOVING_ACTIONS = {"issue_refund", "waive_fee"}
 
 
 def process_event(db: Session, event_id: str) -> CaseState:
@@ -91,9 +95,19 @@ def advance_case(db: Session, case: CaseState, ops_event: dict, triage_result: T
     save_case(db, case)
 
     customer = CRMAdapter(db).get_customer(case.customer_ref)
+    # fraud_score defaults to 0.0 until the Fraud ML model lands (build step
+    # 9); the gate itself already exists and is exercised by
+    # tests/unit/policy_engine — this is where a real score will plug in for
+    # every money-moving proposal, regardless of which agent made it.
+    fraud_score = 0.0
+    refund_30d_inr = 0.0
+    if proposal["action_type"] in MONEY_MOVING_ACTIONS:
+        refund_30d_inr = PaymentsAdapter(db).refund_history_30d(case.customer_ref)
+
     decision = authorise(
         proposal_id=proposal["proposal_id"], case_id=case.case_id, action_type=proposal["action_type"],
         amount_inr=proposal["args"].get("amount_inr"), customer=customer,
+        fraud_score=fraud_score, refund_30d_inr=refund_30d_inr,
         agent_confidence=proposal["confidence"], verifier_verdict=verifier_report["verdict"],
         tool_calls_used=case.tool_calls_used, max_tool_calls=case.max_tool_calls,
         revisions=case.revisions, max_revisions=case.max_revisions,
@@ -123,6 +137,7 @@ def advance_case(db: Session, case: CaseState, ops_event: dict, triage_result: T
     elif decision.outcome in (Outcome.NEEDS_APPROVAL, Outcome.DUAL_APPROVAL):
         case.status = CaseStatus.APPROVAL_PENDING
         save_case(db, case)
+        create_approval_requests(db, case_id=case.case_id, proposal_id=proposal["proposal_id"], decision=decision)
     else:  # ESCALATE / DENY
         case.status = CaseStatus.ESCALATE
         save_case(db, case)
