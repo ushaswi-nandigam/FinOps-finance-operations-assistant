@@ -50,8 +50,28 @@ INJECTION_ATTEMPTS = [
 ]
 
 
+INTERNAL_OPS_SYSTEM_CUSTOMER_REF = "cus_tok_internal"
+
+
 def generate_customers(count: int = 300) -> list[dict]:
-    customers = []
+    customers = [{
+        # Not a real customer — the identity internal-ops requests (merchant
+        # onboarding, access requests, ...) route through, since those
+        # aren't scoped to any one customer but still need a valid
+        # customer_ref for the policy engine's unknown-customer hard gate
+        # (CUSTOMER-GATE-1) to pass. VERIFIED/unflagged so it never trips
+        # any of the other gates either.
+        "customer_ref": INTERNAL_OPS_SYSTEM_CUSTOMER_REF,
+        "name": "Internal Ops System Account",
+        "email": "internal-ops@finops.internal",
+        "phone": "0000000000",
+        "tier": "STANDARD",
+        "tenure_months": 999,
+        "kyc_status": "VERIFIED",
+        "is_flagged": False,
+        "is_minor": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }]
     tiers = ["STANDARD", "SILVER", "GOLD", "PLATINUM"]
     kyc_statuses = ["VERIFIED", "VERIFIED", "VERIFIED", "PENDING", "REJECTED"]
 
@@ -361,11 +381,12 @@ def main() -> None:
     print("Generating synthetic universe for FinOps Assistant...")
 
     customers = generate_customers(300)
-    txns = generate_transactions(customers, 8000)
-    tickets = generate_tickets(customers, 400)
-    transcripts = generate_transcripts(customers, 40)
-    disputes = generate_disputes(customers, txns, 120)
-    fraud_cases = generate_fraud_cases(customers, txns, 80)
+    real_customers = [c for c in customers if c["customer_ref"] != INTERNAL_OPS_SYSTEM_CUSTOMER_REF]
+    txns = generate_transactions(real_customers, 8000)
+    tickets = generate_tickets(real_customers, 400)
+    transcripts = generate_transcripts(real_customers, 40)
+    disputes = generate_disputes(real_customers, txns, 120)
+    fraud_cases = generate_fraud_cases(real_customers, txns, 80)
     policies = generate_policies()
     sops = generate_sops()
     workflows = generate_internal_ops_workflows(60)

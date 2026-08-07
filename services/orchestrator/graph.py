@@ -22,7 +22,7 @@ from services.common.schemas import ActorRecord, CaseState, CostRecord
 from services.fraud_ml.scorer import score_transaction
 from services.mocks.crm import CRMAdapter
 from services.mocks.payments import PaymentsAdapter
-from services.orchestrator.agents import fraud, payments, support
+from services.orchestrator.agents import fraud, internal_ops, payments, support
 from services.orchestrator.approvals import create_approval_requests
 from services.orchestrator.case_store import create_case, save_case
 from services.orchestrator.events import get_ops_event
@@ -32,9 +32,14 @@ from services.tools.executor import execute_tool
 from services.triage.cascade import triage
 from services.triage.schemas import TriageResult
 
-# Extended in a later build step as the Internal Ops agent lands.
-AGENT_HANDLERS = {Domain.SUPPORT: support.handle, Domain.PAYMENTS: payments.handle, Domain.FRAUD: fraud.handle}
-AGENT_NAMES = {Domain.SUPPORT: support.NAME, Domain.PAYMENTS: payments.NAME, Domain.FRAUD: fraud.NAME}
+AGENT_HANDLERS = {
+    Domain.SUPPORT: support.handle, Domain.PAYMENTS: payments.handle,
+    Domain.FRAUD: fraud.handle, Domain.INTERNAL_OPS: internal_ops.handle,
+}
+AGENT_NAMES = {
+    Domain.SUPPORT: support.NAME, Domain.PAYMENTS: payments.NAME,
+    Domain.FRAUD: fraud.NAME, Domain.INTERNAL_OPS: internal_ops.NAME,
+}
 
 MONEY_MOVING_ACTIONS = {"issue_refund", "waive_fee"}
 

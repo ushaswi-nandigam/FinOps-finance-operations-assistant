@@ -27,6 +27,9 @@ seed:
 load-seed:
 	python scripts/load_seed.py
 
+index-policies:
+	python scripts/index_policies.py
+
 test:
 	pytest tests/ --cov=services --cov-report=term-missing
 

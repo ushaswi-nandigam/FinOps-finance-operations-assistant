@@ -52,18 +52,29 @@ def test_scenario1_refund_status_query_fully_autonomous(db):
 
 
 def test_unknown_domain_agent_escalates_cleanly(db):
+    """Domain.COMPLIANCE has no triage rule that routes to it (the
+    Compliance Agent is a citation service other agents/the console call
+    directly, not a case-owning domain agent — see
+    services/orchestrator/agents/compliance.py) and so is never wired into
+    AGENT_HANDLERS. advance_case must escalate cleanly for any domain
+    that isn't, rather than crash — exercised directly here since no
+    ingress path can produce a COMPLIANCE-domain case to route through
+    process_event()."""
+    from services.common.enums import Domain
+    from services.orchestrator.case_store import create_case, save_case
+    from services.orchestrator.graph import advance_case
+    from services.triage.schemas import TriageResult
+
     row = db.execute(text("SELECT customer_ref FROM customers LIMIT 1")).mappings().first()
-    event_id = _make_ops_event(db, source="internal_ops", customer_ref=row["customer_ref"], channel="form",
-                                raw_text="Onboard new merchant MerchantX")
+    case = create_case(db, event_id="evt_compliance_test", domain=Domain.COMPLIANCE, customer_ref=row["customer_ref"])
+    save_case(db, case)
+    triage_result = TriageResult(intent="other", domain=Domain.COMPLIANCE, confidence=1.0, route_stage="T0_RULES")
+
+    case = advance_case(db, case, {"event_id": "evt_compliance_test", "redacted_text": "x"}, triage_result)
     db.flush()
 
-    case = process_event(db, event_id)
-    db.flush()
-
-    # Domain resolves to INTERNAL_OPS via T0 rule, but no Internal Ops Agent
-    # is wired up yet (a later build step) — must escalate, not crash.
     assert case.status == CaseStatus.ESCALATE
-    assert "no agent" in (case.error or "").lower() or "internal_ops" in (case.error or "").lower()
+    assert "no agent" in (case.error or "").lower() or "compliance" in (case.error or "").lower()
 
     decisions = db.execute(text("SELECT * FROM decision_records WHERE case_id = :id"), {"id": case.case_id}).mappings().all()
     assert len(decisions) == 1
