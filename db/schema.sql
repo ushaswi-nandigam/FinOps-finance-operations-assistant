@@ -196,7 +196,10 @@ CREATE TABLE IF NOT EXISTS action_proposals (
     proposed_by       VARCHAR(64) NOT NULL,
     reasoning         TEXT NOT NULL,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
+    -- case_id is a loose correlation id, not a hard FK to cases (same
+    -- reasoning as decision_records below): it lets the policy engine, tool
+    -- layer, and audit ledger be built and tested independently of the
+    -- orchestrator's case state machine.
     INDEX idx_proposals_case (case_id)
 ) ENGINE=InnoDB;
 
@@ -212,7 +215,6 @@ CREATE TABLE IF NOT EXISTS risk_decisions (
     required_approvers INT NOT NULL DEFAULT 0,
     requires_distinct_approvers BOOLEAN NOT NULL DEFAULT FALSE,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
     INDEX idx_risk_decisions_proposal (proposal_id)
 ) ENGINE=InnoDB;
 
@@ -231,7 +233,6 @@ CREATE TABLE IF NOT EXISTS approvals (
     sla_deadline      DATETIME NOT NULL,
     decided_at        DATETIME DEFAULT NULL,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
     UNIQUE KEY uq_proposal_approver (proposal_id, approver_id),
     INDEX idx_approvals_status (status)
 ) ENGINE=InnoDB;
@@ -250,8 +251,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     status            ENUM('DRY_RUN','SUCCESS','FAILED','ROLLED_BACK') NOT NULL DEFAULT 'SUCCESS',
     result            JSON NOT NULL,
     created_at        DATETIME NOT NULL,
-    UNIQUE KEY uq_idempotency_key (idempotency_key),
-    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+    UNIQUE KEY uq_idempotency_key (idempotency_key)
 ) ENGINE=InnoDB;
 
 -- =====================================================================

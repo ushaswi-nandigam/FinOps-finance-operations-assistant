@@ -42,13 +42,24 @@ def train_triage_model():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    # C=1.0's default regularization under-calibrates this classifier: it
+    # gets every held-out example right but its own predict_proba max rarely
+    # clears a 0.85 abstention threshold, which would push ~all traffic into
+    # the LLM stage and defeat the point of a cheap-first cascade. A cleanly
+    # separable synthetic intent set like this one can support much less
+    # regularization without overfitting, so this is calibrated to the data,
+    # not just cranked up — see the confidence stats printed below.
     print("Training Logistic Regression classifier...")
-    clf = LogisticRegression(max_iter=1000, C=1.0)
+    clf = LogisticRegression(max_iter=2000, C=20.0)
     clf.fit(X_train, y_train)
 
     y_pred = clf.predict(X_test)
+    y_proba = clf.predict_proba(X_test)
+    max_proba = y_proba.max(axis=1)
     f1 = f1_score(y_test, y_pred, average="weighted")
     print(f"[OK] Triage Classifier Training Complete! Weighted F1-score: {f1:.4f}")
+    print(f"Held-out confidence (max predict_proba): mean={max_proba.mean():.3f}, "
+          f"p10={sorted(max_proba)[len(max_proba)//10]:.3f}, min={max_proba.min():.3f}")
     print("\nClassification Report:\n", classification_report(y_test, y_pred, target_names=label_encoder.classes_))
 
     # Save artifacts

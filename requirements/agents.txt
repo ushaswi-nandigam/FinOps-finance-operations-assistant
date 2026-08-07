@@ -1,5 +1,6 @@
 # LLM provider for the T2/T3 tiers only (T0/T1 never call this).
+# google-genai, not the older google-generativeai (fully deprecated upstream).
 # No LangGraph/LangChain: the orchestrator is a small hand-rolled async state
 # machine (services/orchestrator/graph.py) — one fewer heavy dependency for
 # a system whose control flow is a short, fixed set of states. See docs/LEARN.md.
-google-generativeai>=0.8.0
+google-genai>=1.0.0
