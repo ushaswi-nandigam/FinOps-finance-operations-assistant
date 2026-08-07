@@ -77,8 +77,19 @@ def generate_transactions(customers: list[dict], count: int = 8000) -> list[dict
     merchant_categories = ["ECOM", "TRAVEL", "UTILITIES", "FOOD", "ENTERTAINMENT", "FINANCE"]
     failure_codes = ["INSUFFICIENT_FUNDS", "CARD_EXPIRED", "GATEWAY_TIMEOUT", "BANK_DECLINED", "NONE"]
 
-    # A handful of shared devices/IPs so the fraud linkage graph (networkx)
-    # has real connected components to find, not just noise.
+    # Each customer gets 1-2 *personal* devices (deterministic, per-customer
+    # namespace) so unrelated customers essentially never collide on
+    # device_id by chance. A handful of shared "ring" devices are then
+    # deliberately reused across a small group of customers — that
+    # deliberate overlap is what services/fraud_ml/linkage.py's connected-
+    # components search is meant to find. Without personal device
+    # namespacing, a small shared pool (e.g. 1500 devices across 8000 txns)
+    # produces so much incidental cross-customer collision that the fraud
+    # ring is indistinguishable from noise in the graph.
+    personal_devices = {
+        c["customer_ref"]: [f"dev_p{i}_{j}" for j in range(random.randint(1, 2))]
+        for i, c in enumerate(customers)
+    }
     fraud_ring_devices = [f"dev_ring_{i}" for i in range(6)]
     fraud_ring_customers = random.sample(customers, k=8)
 
@@ -94,7 +105,7 @@ def generate_transactions(customers: list[dict], count: int = 8000) -> list[dict
             days=random.randint(0, 30), hours=random.randint(0, 23), minutes=random.randint(0, 59),
         )
 
-        device_id = f"dev_{random.randint(1, 1500)}"
+        device_id = random.choice(personal_devices[cust["customer_ref"]])
         if cust in fraud_ring_customers and random.random() < 0.6:
             device_id = random.choice(fraud_ring_devices)
             is_fraud = True

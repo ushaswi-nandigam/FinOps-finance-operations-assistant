@@ -19,9 +19,10 @@ from services.audit.ledger import record_decision
 from services.common.config import settings
 from services.common.enums import CaseStatus, Domain, Outcome
 from services.common.schemas import ActorRecord, CaseState, CostRecord
+from services.fraud_ml.scorer import score_transaction
 from services.mocks.crm import CRMAdapter
 from services.mocks.payments import PaymentsAdapter
-from services.orchestrator.agents import payments, support
+from services.orchestrator.agents import fraud, payments, support
 from services.orchestrator.approvals import create_approval_requests
 from services.orchestrator.case_store import create_case, save_case
 from services.orchestrator.events import get_ops_event
@@ -31,9 +32,9 @@ from services.tools.executor import execute_tool
 from services.triage.cascade import triage
 from services.triage.schemas import TriageResult
 
-# Extended in later build steps as Fraud/InternalOps agents land.
-AGENT_HANDLERS = {Domain.SUPPORT: support.handle, Domain.PAYMENTS: payments.handle}
-AGENT_NAMES = {Domain.SUPPORT: support.NAME, Domain.PAYMENTS: payments.NAME}
+# Extended in a later build step as the Internal Ops agent lands.
+AGENT_HANDLERS = {Domain.SUPPORT: support.handle, Domain.PAYMENTS: payments.handle, Domain.FRAUD: fraud.handle}
+AGENT_NAMES = {Domain.SUPPORT: support.NAME, Domain.PAYMENTS: payments.NAME, Domain.FRAUD: fraud.NAME}
 
 MONEY_MOVING_ACTIONS = {"issue_refund", "waive_fee"}
 
@@ -48,6 +49,9 @@ def process_event(db: Session, event_id: str) -> CaseState:
     triage_result = triage(ops_event["source"], ops_event["redacted_text"], ops_event["entities"])
 
     case = create_case(db, event_id=event_id, domain=triage_result.domain, customer_ref=ops_event["customer_ref"])
+    case.cost.tokens_in += triage_result.tokens_in
+    case.cost.tokens_out += triage_result.tokens_out
+    case.cost.inr += triage_result.cost_inr
     save_case(db, case, triage_stage=triage_result.route_stage)
 
     return advance_case(db, case, ops_event, triage_result)
@@ -95,14 +99,19 @@ def advance_case(db: Session, case: CaseState, ops_event: dict, triage_result: T
     save_case(db, case)
 
     customer = CRMAdapter(db).get_customer(case.customer_ref)
-    # fraud_score defaults to 0.0 until the Fraud ML model lands (build step
-    # 9); the gate itself already exists and is exercised by
-    # tests/unit/policy_engine — this is where a real score will plug in for
-    # every money-moving proposal, regardless of which agent made it.
+    # Every money-moving proposal gets a real fraud score, regardless of
+    # which agent made it — this is what lets FRAUD-POL-2.1 (no auto-execute
+    # above 0.7, any amount) actually bite on a Payments Agent refund, not
+    # just on Fraud Agent's own proposals.
     fraud_score = 0.0
     refund_30d_inr = 0.0
     if proposal["action_type"] in MONEY_MOVING_ACTIONS:
         refund_30d_inr = PaymentsAdapter(db).refund_history_30d(case.customer_ref)
+        txn_id = proposal["args"].get("txn_id")
+        if txn_id:
+            txn = PaymentsAdapter(db).get_transaction(txn_id)
+            if txn:
+                fraud_score = score_transaction(db, txn)["risk_score"]
 
     decision = authorise(
         proposal_id=proposal["proposal_id"], case_id=case.case_id, action_type=proposal["action_type"],

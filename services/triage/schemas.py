@@ -12,3 +12,6 @@ class TriageResult(BaseModel):
     urgency: str = "medium"
     extracted_slots: dict[str, Any] = Field(default_factory=dict)
     route_stage: str  # T0_RULES | T1_CLASSIFIER | T2_LLM | T3_LLM
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost_inr: float = 0.0

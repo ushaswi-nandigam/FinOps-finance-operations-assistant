@@ -6,29 +6,13 @@ frontier tier (`gemini-flash-latest`) — only the model name differs.
 Anti-injection rule (docs/architecture.md §L5b): this is the first point
 redacted customer text reaches an LLM at all, so the untrusted text is always
 wrapped and the model is told explicitly that it is data, never instructions.
-
-Uses `google-genai` (the current SDK) — `google-generativeai` is fully
-deprecated upstream, see docs/LEARN.md.
 """
 
-import json
-
-from google import genai
-from google.genai import types
-
-from services.common.config import settings
+from services.common.cost import estimate_cost_inr
 from services.common.enums import Domain
+from services.common.llm import generate_json
 from services.triage.rules import INTENT_DOMAIN, urgency_for
 from services.triage.schemas import TriageResult
-
-_client: genai.Client | None = None
-
-
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return _client
 
 
 def _build_prompt(redacted_text: str, hint_intent: str, hint_confidence: float) -> str:
@@ -53,14 +37,8 @@ Respond with ONLY a JSON object, no markdown fences:
 
 
 def route_with_llm(redacted_text: str, *, model_name: str, hint_intent: str, hint_confidence: float) -> TriageResult:
-    client = _get_client()
     prompt = _build_prompt(redacted_text, hint_intent, hint_confidence)
-
-    response = client.models.generate_content(
-        model=model_name, contents=prompt,
-        config=types.GenerateContentConfig(response_mime_type="application/json"),
-    )
-    parsed = json.loads(response.text)
+    parsed, tokens_in, tokens_out = generate_json(model_name, prompt)
 
     intent = str(parsed.get("intent", "other"))
     confidence = float(parsed.get("confidence", 0.5))
@@ -68,4 +46,5 @@ def route_with_llm(redacted_text: str, *, model_name: str, hint_intent: str, hin
     domain = INTENT_DOMAIN.get(intent, Domain.SUPPORT)
 
     return TriageResult(intent=intent, domain=domain, confidence=confidence, urgency=urgency,
-                         extracted_slots={}, route_stage="T2_LLM")
+                         route_stage="T2_LLM", tokens_in=tokens_in, tokens_out=tokens_out,
+                         cost_inr=estimate_cost_inr(model_name, tokens_in, tokens_out))
