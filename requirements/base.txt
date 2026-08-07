@@ -1,0 +1,24 @@
+# Core API, Validation, Database & Auth
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+python-multipart>=0.0.20
+
+# Database (MySQL 8, sync SQLAlchemy — simpler and more reliable on Windows
+# than an async MySQL driver; see docs/LEARN.md)
+sqlalchemy>=2.0.30
+pymysql>=1.1.0
+
+# Auth / RBAC
+pyjwt>=2.10.0
+bcrypt>=4.2.0
+
+# Security, Utilities
+cryptography>=43.0.0,<44.1
+httpx>=0.28.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+jinja2>=3.1.0
+rich>=13.9.0
+ulid-py>=1.1.0

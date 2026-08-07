@@ -1,0 +1,47 @@
+# Environment files
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Regenerable synthetic data & trained models (deterministic seed —
+# `make seed && make load-seed` / training scripts reproduce these)
+data/generated/*.json
+services/*/model.pkl
+services/*/label_encoder.pkl
+
+# Test / tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+web/dist/

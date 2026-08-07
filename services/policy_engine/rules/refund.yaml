@@ -1,0 +1,24 @@
+# REFUND-POL-1.0/3.2/4.0 tier table (docs/architecture.md §L7).
+- id: REFUND-POL-1.0
+  when:
+    action: issue_refund
+    amount_inr: {lte: 500}
+  then: AUTO_EXECUTE
+  tier: T1
+  reason: "Refunds of ₹500 or less for a failed transaction are auto-approved (REFUND-POL-1.0), sampled for post-hoc review."
+
+- id: REFUND-POL-3.2
+  when:
+    action: issue_refund
+    amount_inr: {gt: 500, lte: 25000}
+  then: NEEDS_APPROVAL
+  tier: T2
+  reason: "Refunds between ₹500 and ₹25,000 require one ops approval (REFUND-POL-3.2)."
+
+- id: REFUND-POL-4.0
+  when:
+    action: issue_refund
+    amount_inr: {gt: 25000}
+  then: DUAL_APPROVAL
+  tier: T3
+  reason: "Refunds above ₹25,000 require dual approval by two distinct approvers (REFUND-POL-4.0)."
