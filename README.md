@@ -1,9 +1,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/LangGraph-0.2-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white" alt="LangGraph"/>
-  <img src="https://img.shields.io/badge/Supabase%20%2F%20PostgreSQL-16-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
-  <img src="https://img.shields.io/badge/Redis-Streams-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"/>
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React"/>
+  <img src="https://img.shields.io/badge/MySQL-8-4479A1?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
 </p>
 
@@ -25,21 +24,19 @@ Financial operations teams in India's digital payments ecosystem face high volum
 
 ### The Brief's Mandatory Guardrails
 
-The system strictly adheres to the four mandatory operational guardrails:
-
 | Guardrail | Mandatory Requirement |
 |:---|:---|
 | **Human-in-the-Loop** | High-risk or irreversible financial actions must require human approval before execution. |
 | **Auditability** | Every decision and escalation must produce an append-only, tamper-evident audit record. |
-| **Data Privacy** | Sensitive PII (Aadhaar, PAN, UPI VPA, cards) must be tokenised before LLM processing in compliance with **DPDP Act 2023** and **RBI data-localisation** guidelines. |
+| **Data Privacy** | Sensitive PII (Aadhaar, PAN, UPI VPA, cards) must be tokenised before LLM processing in compliance with **DPDP Act 2023** and **RBI data-localisation** guidance. |
 | **Explainability** | Every action carries a clear, plain-language reason explaining *why* it was taken or escalated. |
 
-### Our Performance Targets
+### Measured Results (not projections — see `docs/cost-model.md`)
 
-- **Autonomous Resolution**: Target 55–70% auto-resolution rate for routine, low-risk cases.
-- **Zero Over-Automation Rate**: Target 0% auto-execution on cases requiring human approval.
-- **Cost Reduction**: Achieve an estimated **~80% cost reduction** via a cheap-first model cascade.
-- **Rapid Decisioning**: Present human approvers with 20-second decision cards.
+- **75.0% auto-resolution rate**, measured from a real demo run.
+- **0% over-automation rate** in the golden evaluation set (`evals/runner.py`) — the safety metric that matters most.
+- **98.6% cost reduction** vs. an all-frontier-LLM baseline, from the cheap-first cascade.
+- **4/4 prompt-injection scenarios defended** — verified directly, not asserted.
 
 ---
 
@@ -47,65 +44,57 @@ The system strictly adheres to the four mandatory operational guardrails:
 
 | Guardrail | Technical Implementation | Core Location |
 |:---|:---|:---|
-| **Human-in-the-Loop** | Deterministic risk tiers; T2 single approval, T3 maker-checker enforced by DB constraint | [`services/policy_engine/`](file:///c:/My%20Work/AI/finops-agent/services/policy_engine/) · [`services/api/`](file:///c:/My%20Work/AI/finops-agent/services/api/) |
-| **Auditability** | Hash-chained append-only ledger (`sha256`); escalations logged with identical rigour as actions | [`services/audit/`](file:///c:/My%20Work/AI/finops-agent/services/audit/) |
-| **Data Privacy** | Presidio + Indian recognisers tokenise PII before prompt entry; real values saved in encrypted PII vault | [`services/privacy/`](file:///c:/My%20Work/AI/finops-agent/services/privacy/) |
-| **Explainability** | `reason_plain` generated once, stored in decision record, reused across console, email, and auditor export | [`services/common/schemas/decision_record.py`](file:///c:/My%20Work/AI/finops-agent/services/common/schemas/decision_record.py) |
+| **Human-in-the-Loop** | Deterministic risk tiers; T2 single approval, T3 maker≠checker enforced by a DB `UNIQUE` constraint | [`services/policy_engine/`](services/policy_engine/) · [`services/orchestrator/approvals.py`](services/orchestrator/approvals.py) |
+| **Auditability** | Hash-chained append-only ledger (`sha256`); escalations logged with identical rigour to executed actions | [`services/audit/`](services/audit/) |
+| **Data Privacy** | Regex + checksum Indian PII recognisers tokenise PII before it reaches a prompt; real values held in an AES-GCM vault | [`services/privacy/`](services/privacy/) |
+| **Explainability** | `reason_plain` generated once by the policy engine, stored on the decision record, reused everywhere it's shown | [`services/common/schemas/decision_record.py`](services/common/schemas/decision_record.py) |
 
 ---
 
 ## 🏗️ Architecture & Workflow
 
-The system is governed by one core thesis:
-
 > **"The LLM proposes. A deterministic policy engine disposes. A human approves anything irreversible. Everything is written to an append-only ledger with a plain-language reason."**
 
 ```mermaid
 flowchart TD
-    A[Ingress: tickets, transcripts, payment webhooks] --> B[Normalise + PII Tokenise]
+    A[Ingress: tickets, transcripts, payment webhooks] --> B[Normalise + PII Redact]
     B --> C{Triage Cascade}
     C -->|rule match| D[Orchestrator]
     C -->|classifier conf > 0.85| D
-    C -->|uncertain| C2[LLM Router] --> D
+    C -->|uncertain| C2[Gemini Router] --> D
     D --> E[Support Agent]
     D --> F[Payments Agent]
     D --> G[Fraud Agent]
     D --> H[Internal Ops Agent]
-    E & F & G & H --> I[Tool / MCP Layer]
+    E & F & G & H --> I[Tool Layer]
     I --> J[Action Proposal]
     J --> K[Verifier Agent - self check]
     K --> L{Risk & Policy Engine}
-    L -->|Tier 0-1| M[Auto Execute]
-    L -->|Tier 2| N[Human Approval]
-    L -->|Tier 3| O[Dual Approval maker-checker]
+    L -->|T0-T1| M[Auto Execute]
+    L -->|T2| N[Human Approval]
+    L -->|T3| O[Dual Approval maker-checker]
     L -->|out of policy| P[Escalate with reason]
     N --> M
     O --> M
     M --> Q[Audit Ledger + Cost Record]
     P --> Q
-    Q --> R[Ops Console]
-    R --> S[Feedback: approvals become training labels]
-    S --> C
+    Q --> R[React Ops Console]
 ```
+
+This project started from a 14-layer reference architecture (`docs/architecture.md`) and was deliberately scoped down for a hackathon build — MySQL instead of Supabase/Postgres, a hand-rolled orchestrator instead of LangGraph, no Redis/Celery, regex PII recognisers instead of Presidio. **`docs/LEARN.md` explains every one of these choices in detail** — what was cut, why, and what real bugs were found and fixed along the way. Read it if you want to actually learn from this codebase, not just run it.
 
 ---
 
 ## 💰 Cost per Transaction & Model Cascade
 
-We implement a cheap-first cascade that reduces LLM expenses by **~80%** compared to sending every request to a frontier LLM.
+| Tier | Technology | Purpose |
+|:---|:---|:---|
+| **T0** | Regex rules, deterministic policy engine | Triage for known patterns, all authorisation |
+| **T1** | `fastembed` + logistic regression, LightGBM + SHAP + networkx | Intent classification, fraud scoring — no LLM |
+| **T2** | `gemini-flash-lite-latest` | Routine agent tool-calling, triage fallback |
+| **T3** | `gemini-flash-latest` | Ambiguous triage, fraud narrative synthesis |
 
-| Tier | Technology | Purpose | Volume Share |
-|:---|:---|:---|:---:|
-| **T0** | Rules / LightGBM / NetworkX / Policy Engine | Triage, scoring, policy authorisation | ~40% |
-| **T1** | Local Ollama (`qwen2.5:3b`) / `fastembed` | Intent classification, slot extraction | ~40% |
-| **T2** | `gemini-2.0-flash-lite` | Routine agent tools & drafting | ~15% |
-| **T3** | `gemini-2.0-flash` | Complex disputes, fraud narrative synthesis | ~5% |
-
-### Measured Cost Baseline (Sampled from Evaluation Runs)
-
-- **Blended Cost per Decision**: `₹0.04` (vs `₹0.35` all-frontier baseline)
-- **Cost Savings**: **~88.5% spend reduction**
-- **Data Residency**: Deployed in Supabase / PostgreSQL 16 (AWS `ap-south-1` / Mumbai region).
+**Blended cost per decision: ₹0.0027** (98.6% below the all-frontier baseline), measured by running `scripts/demo_driver.py` + `evals/runner.py` against a freshly seeded database and reading `GET /dashboard/summary` — see `docs/cost-model.md` for the full breakdown and how to reproduce it yourself.
 
 ---
 
@@ -114,14 +103,16 @@ We implement a cheap-first cascade that reduces LLM expenses by **~80%** compare
 | Layer | Technology |
 |:---|:---|
 | **API & Common Contracts** | Python 3.11/3.12 · FastAPI · Pydantic v2 |
-| **Agent Orchestration** | LangGraph · LangChain · Google GenAI SDK |
-| **Database & Vector Store** | Supabase / PostgreSQL 16 + `pgvector` (Mumbai `ap-south-1`) |
-| **Queue & Background Jobs** | Redis Streams · `arq` |
-| **Local Models & Embeddings** | Ollama (`qwen2.5:3b`) · `fastembed` (`bge-small` via ONNX) |
-| **Classical ML & Solvers** | scikit-learn · LightGBM · SHAP · NetworkX · OR-Tools |
-| **PII Protection** | Microsoft Presidio + Custom Indian Recognisers (PAN, Aadhaar, UPI) |
-| **Frontend Console** | Next.js 14 · Tailwind · shadcn/ui |
-| **Containerization** | Docker Compose · Makefile |
+| **Agent Orchestration** | Hand-rolled state machine (`services/orchestrator/graph.py`) · `google-genai` |
+| **Database** | MySQL 8 · SQLAlchemy (sync) + PyMySQL |
+| **Local Models & Embeddings** | `fastembed` (`bge-small-en-v1.5` via ONNX) |
+| **Classical ML & Solvers** | scikit-learn · LightGBM · SHAP · NetworkX |
+| **PII Protection** | Regex + checksum Indian recognisers (PAN, Aadhaar, card, UPI, IFSC) + AES-GCM vault |
+| **Auth** | Hand-rolled JWT (PyJWT) + bcrypt, RBAC roles |
+| **Frontend Console** | React 18 · Vite · TypeScript · Tailwind CSS |
+| **Containerisation (optional, local dev only)** | Docker Compose · Makefile — not used for deployment/CI |
+
+See `docs/LEARN.md` §1 for why each of these was chosen over the original spec's Postgres/LangGraph/Presidio/Redis/Next.js stack.
 
 ---
 
@@ -129,57 +120,42 @@ We implement a cheap-first cascade that reduces LLM expenses by **~80%** compare
 
 ```
 finops-agent/
-├── docker-compose.yml              # PostgreSQL, Redis, API, Worker containers
-├── Makefile                        # up, down, seed, test, eval, demo targets
-├── .gitattributes                  # LF line ending enforcement
-├── pyproject.toml                  # Python package & tool configuration
-├── requirements/                   # Modularized requirements
-│   ├── base.txt                    #   FastAPI, SQLAlchemy, Pydantic, Redis
-│   ├── ml.txt                      #   LightGBM, SHAP, NetworkX, Presidio, fastembed
-│   ├── agents.txt                  #   LangGraph, LangChain, Google GenAI
-│   └── dev.txt                     #   pytest, ruff, mypy
+├── docker-compose.yml          # optional local convenience (MySQL + API + web) — not the deployment path
+├── Makefile                    # up, migrate, seed, load-seed, index-policies, test, eval, demo
+├── db/schema.sql               # MySQL DDL, applied by scripts/migrate.py
 ├── data/
-│   ├── policies/                   # 25 numbered policy rules (RAG corpus)
-│   ├── sops/                       # Standard operating procedures
-│   └── generated/                  # Synthetic dataset output
-├── db/migrations/                  # Alembic DB migration scripts
+│   ├── policies/ sops/         # placeholders — real corpus is generated (see below)
+│   └── generated/              # synthetic dataset output (regenerate with `make seed`)
 ├── docs/
-│   ├── architecture.md             # Full 14-layer architecture specification
-│   ├── ai-workflow.md              # Workflow and state machine details
-│   └── cost-model.md               # Measured cost model documentation
+│   ├── architecture.md         # original 14-layer reference spec
+│   ├── LEARN.md                # what's actually built, why, and every real bug found along the way
+│   ├── ai-workflow.md          # state machine / agent workflow
+│   ├── cost-model.md           # measured cost model, with real numbers
+│   └── pitch.md                # business pitch
 ├── services/
-│   ├── common/                     # Common Pydantic v2 schemas, enums, IDs, config
-│   ├── api/                        # FastAPI REST API endpoints
-│   ├── worker/                     # Background job entrypoint
-│   ├── execution/                  # Saga pattern, idempotency, transactional outbox
-│   ├── orchestrator/               # LangGraph state machine & specialist agents
-│   ├── policy_engine/              # Deterministic YAML policy engine (authorise)
-│   ├── tools/                      # MCP servers, tool manifests, adapters
-│   ├── triage/                     # Cheap-first triage cascade
-│   ├── fraud_ml/                   # LightGBM scoring & NetworkX graph analysis
-│   ├── privacy/                    # Presidio PII tokenisation & encrypted vault
-│   ├── audit/                      # Hash-chained append-only decision ledger
-│   ├── feedback/                   # L12 approval feedback loop
-│   └── mocks/                      # Mock CRM, Payments, Case Management & KB
-├── tests/                          # Unit & integration tests
-├── evals/                          # Golden eval dataset & runner
-└── scripts/                        # Dataset seed & demo runner scripts
+│   ├── common/                 # Pydantic v2 schemas, enums, IDs, config, DB engine, LLM client, cost estimator
+│   ├── api/                    # FastAPI routers: ingress, cases, approvals, audit, auth, compliance, dashboard
+│   ├── auth/                   # JWT + bcrypt
+│   ├── orchestrator/            # state machine, case store, approvals, resume, agents/
+│   │   └── agents/             # support.py payments.py fraud.py internal_ops.py compliance.py verify.py
+│   ├── policy_engine/          # deterministic YAML rules + authorise() — zero LLM calls
+│   ├── tools/                  # manifest registry + executor (idempotency, dry-run)
+│   ├── triage/                 # rules -> classifier -> LLM cascade
+│   ├── fraud_ml/               # feature engineering, LightGBM training, SHAP scoring, networkx linkage
+│   ├── privacy/                # PII recognisers, redactor, AES-GCM vault
+│   ├── audit/                  # hash-chained ledger + signed export
+│   └── mocks/                  # CRM, Payments, CaseMgmt, KB adapters over the seeded MySQL tables
+├── web/                        # React console (Vite + TS + Tailwind)
+├── evals/                      # golden set generator + runner
+├── scripts/                    # seed.py, load_seed.py, migrate.py, train scripts, demo_driver.py
+└── tests/                      # unit + integration tests (141 passing)
 ```
 
 ---
 
-## 🚦 Current Status & Roadmap
+## 🚦 Status
 
-| Feature / Subsystem | Status | Description |
-|:---|:---:|:---|
-| **Common Schemas (`services/common`)** | ✅ Complete | Unified Pydantic v2 models, enums, IDs, config, and unit tests |
-| **Directory Scaffolding & Config** | ✅ Complete | Docker Compose, Makefile, `.gitattributes`, split `requirements/` |
-| **Deterministic Policy Engine** | 🔄 Next | YAML rules loader and `authorise()` implementation |
-| **Audit Ledger (`services/audit`)** | 🔄 Next | Hash-chained tamper-evident decision record storage |
-| **PII Tokenization (`services/privacy`)** | 🔄 Next | Presidio pipeline + encrypted key vault |
-| **Mock Services (`services/mocks`)** | 🔄 Next | Static JSON backend APIs for CRM, Payments, Case Mgmt |
-| **Orchestrator & Agents** | ⏳ Planned | LangGraph graph state machine & domain agents |
-| **Ops Console (`web/`)** | ⏳ Planned | Next.js trace timeline & human approval inbox |
+All 14 build steps are complete: ingress/privacy, policy engine, audit ledger, tool layer, triage cascade, all four domain agents + Verifier + Compliance, human-in-the-loop approvals, the React console, and the golden evaluation set. 141 backend tests passing; all 5 golden-path demo scenarios (`docs/architecture.md` §6) verified end to end, including through the actual browser UI.
 
 ---
 
@@ -188,25 +164,50 @@ finops-agent/
 ### Prerequisites
 
 - Python 3.11+
-- Docker & Docker Compose
+- MySQL 8 (a local server, or `docker compose up mysql` for a disposable one)
+- Node.js 18+ (for the React console)
+- A Gemini API key (free tier works — [ai.google.dev](https://ai.google.dev))
 
-### Quick Setup
+### Setup
 
 ```bash
-# 1. Clone repository
+# 1. Clone and install Python dependencies
 git clone <repo-url>
 cd finops-agent
-
-# 2. Install dependencies
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 
-# 3. Run unit tests on common contracts
-python -m pytest tests/unit/common/
+# 2. Configure environment
+cp .env.example .env
+# edit .env: set GEMINI_API_KEY and a MySQL DATABASE_URL for a database/user you have access to
 
-# 4. Start local infrastructure
-make up
+# 3. Create the schema, generate + load synthetic data, index policies for search
+python scripts/migrate.py
+python scripts/seed.py
+python scripts/load_seed.py
+python scripts/index_policies.py
+python services/triage/train.py
+python -m services.fraud_ml.train
+python scripts/seed_users.py
+
+# 4. Run the backend
+uvicorn services.api.main:app --reload
+
+# 5. Run the frontend (separate terminal)
+cd web
+npm install
+npm run dev
+# open http://localhost:5173 — log in as approver_alice / demo1234 (see scripts/seed_users.py for all demo accounts)
 ```
+
+### Verify it all works
+
+```bash
+pytest tests/                    # 141 tests
+python evals/runner.py           # golden set: triage accuracy, injection defense, over-automation rate
+python scripts/demo_driver.py    # the 5 golden-path scenarios from docs/architecture.md §6, end to end
+```
+
+`make up` will bring up a local MySQL container plus the API and web containers via Docker Compose, if you'd rather not install MySQL/Node directly — this is offered purely as a local convenience, not as the deployment or CI/CD path.
 
 ---
 

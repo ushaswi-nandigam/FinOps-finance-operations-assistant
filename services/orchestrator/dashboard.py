@@ -53,7 +53,6 @@ def summary(db: Session) -> dict[str, Any]:
     # gone through the frontier tier instead of the cascade — this is the
     # number the "cost cascade" story is measured against.
     frontier_rate = 0.06 / 1000 * 1500 + 0.25 / 1000 * 400  # a rough single-call estimate, see services/common/cost.py
-    naive_baseline_cost = total_cases * frontier_rate
 
     return {
         "total_cases": total_cases,

@@ -97,3 +97,34 @@ def decide_approval(db: Session, *, approval_id: str, approver_id: str, decision
         "approval_id": approval_id, "case_id": approval["case_id"], "proposal_id": approval["proposal_id"],
         "status": new_status, "all_required_approved": all_approved, "any_rejected": any_rejected,
     }
+
+
+def decide_and_resume(
+    db: Session, *, approval_id: str, approver_id: str, decision: Decision, reason: str,
+    modified_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The single entrypoint every caller should use — `decide_approval`
+    alone only updates the approval row; it does *not* execute the
+    underlying action once every required slot is in, or escalate the case
+    on rejection. That resumption logic used to live only in the API router
+    (services/api/routers/approvals.py), which meant any other caller of
+    `decide_approval` (this function's own reason for existing:
+    scripts/demo_driver.py originally called `decide_approval` directly and
+    silently left every approved case stuck in APPROVAL_PENDING, since
+    nothing ever told the orchestrator the approval had completed) got an
+    incomplete operation. Consolidating it here makes that impossible to
+    forget again.
+    """
+    from services.orchestrator import resume
+
+    outcome = decide_approval(db, approval_id=approval_id, approver_id=approver_id, decision=decision, reason=reason)
+
+    if decision == "approve" and outcome["all_required_approved"]:
+        approver_ids = [s["approver_id"] for s in list_approvals_for_proposal(db, outcome["proposal_id"])]
+        resume.execute_after_approval(db, case_id=outcome["case_id"], proposal_id=outcome["proposal_id"],
+                                       approver_ids=approver_ids, modified_args=modified_args)
+    elif decision in ("reject", "send_back"):
+        resume.reject_case(db, case_id=outcome["case_id"], proposal_id=outcome["proposal_id"],
+                            approver_id=approver_id, reason=reason or f"{decision} with no reason given")
+
+    return outcome
