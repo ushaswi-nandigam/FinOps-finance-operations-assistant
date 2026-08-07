@@ -24,7 +24,8 @@ def pending(limit: int = 50, db: Session = Depends(get_db)) -> list[dict]:
     for row in rows:
         case = load_case(db, row["case_id"])
         proposal = next((p for p in (case["proposals"] if case else []) if p["proposal_id"] == row["proposal_id"]), None)
-        enriched.append({**row, "proposal": proposal, "case_domain": case["domain"] if case else None})
+        tier = (case or {}).get("risk_decision", {}).get("tier")
+        enriched.append({**row, "proposal": proposal, "case_domain": case["domain"] if case else None, "tier": tier})
     return enriched
 
 
