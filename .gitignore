@@ -46,3 +46,4 @@ services/*/label_encoder.pkl
 node_modules/
 web/dist/
 web/*.tsbuildinfo
+evals/report.json

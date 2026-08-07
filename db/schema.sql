@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS cases (
     max_tool_calls    INT NOT NULL DEFAULT 6,
     revisions         INT NOT NULL DEFAULT 0,
     max_revisions     INT NOT NULL DEFAULT 3,
-    triage_stage      VARCHAR(16) DEFAULT NULL,
+    triage_stage      VARCHAR(32) DEFAULT NULL,  -- e.g. "T3_LLM_UNAVAILABLE" (19 chars) exceeds a 16-char column
     error             TEXT DEFAULT NULL,
     created_at        DATETIME NOT NULL,
     updated_at        DATETIME NOT NULL,

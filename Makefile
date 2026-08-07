@@ -33,6 +33,9 @@ index-policies:
 test:
 	pytest tests/ --cov=services --cov-report=term-missing
 
+golden-set:
+	python evals/generate_golden_set.py
+
 eval:
 	python evals/runner.py
 
