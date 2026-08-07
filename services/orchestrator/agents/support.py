@@ -55,7 +55,7 @@ def _kyc_reply(customer: dict) -> str:
     return f"Hi {customer['name']}, {status_text}"
 
 
-def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult) -> AgentOutput:
+def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult, *, revise: bool = False) -> AgentOutput:
     customer_ref = case.customer_ref
     observations: list[dict[str, Any]] = []
     tool_calls_used = 0

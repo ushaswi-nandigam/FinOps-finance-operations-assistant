@@ -56,7 +56,7 @@ def _write_memo(txn: dict, risk_score: float, top_reasons: list[tuple[str, float
         return fallback, 0, 0, 0.0
 
 
-def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult) -> AgentOutput:
+def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult, *, revise: bool = False) -> AgentOutput:
     observations: list[dict[str, Any]] = []
 
     lookup = execute_tool(db, case_id=case.case_id, tool_name="lookup_status",

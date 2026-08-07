@@ -90,10 +90,38 @@ def advance_case(db: Session, case: CaseState, ops_event: dict, triage_result: T
 
     proposal = output.proposal
 
+    # L5b self-check, with a bounded revise-and-retry loop (docs/architecture.md
+    # §6 scenario 4): REVISE sends the proposal back to the same agent with
+    # `revise=True`, up to max_revisions times. If it's still not PASS when
+    # the budget runs out, that's treated as a REJECT for the policy gate —
+    # a proposal cannot loop forever, and un-resolved REVISE is not the same
+    # as PASS.
     case.status = CaseStatus.SELF_VERIFY
-    verifier_report = verify(proposal)
+    verifier_report = verify(proposal, triage_result.extracted_slots)
+    while verifier_report["verdict"] == "REVISE" and case.revisions < case.max_revisions:
+        case.revisions += 1
+        save_case(db, case)
+
+        output = agent_handle(db, case, ops_event, triage_result, revise=True)
+        case.observations.extend(output.observations)
+        case.tool_calls_used += output.tool_calls_used
+        case.cost.tokens_in += output.tokens_in
+        case.cost.tokens_out += output.tokens_out
+        case.cost.inr += output.cost_inr
+        if output.proposal is None:
+            return _escalate(db, case, agent_name=agent_name, reason="Agent could not produce a revised proposal.")
+
+        proposal = output.proposal
+        case.proposals.append(proposal)
+        verifier_report = verify(proposal, triage_result.extracted_slots)
+
     case.verifier_report = verifier_report
     save_case(db, case)
+
+    effective_verifier_verdict = verifier_report["verdict"]
+    if effective_verifier_verdict == "REVISE":
+        # Exhausted the revision budget without reaching PASS.
+        effective_verifier_verdict = "REJECT"
 
     case.status = CaseStatus.RISK_GATE
     save_case(db, case)
@@ -117,7 +145,7 @@ def advance_case(db: Session, case: CaseState, ops_event: dict, triage_result: T
         proposal_id=proposal["proposal_id"], case_id=case.case_id, action_type=proposal["action_type"],
         amount_inr=proposal["args"].get("amount_inr"), customer=customer,
         fraud_score=fraud_score, refund_30d_inr=refund_30d_inr,
-        agent_confidence=proposal["confidence"], verifier_verdict=verifier_report["verdict"],
+        agent_confidence=proposal["confidence"], verifier_verdict=effective_verifier_verdict,
         tool_calls_used=case.tool_calls_used, max_tool_calls=case.max_tool_calls,
         revisions=case.revisions, max_revisions=case.max_revisions,
         cost_inr=case.cost.inr, cost_budget_inr=case.cost_budget_inr,

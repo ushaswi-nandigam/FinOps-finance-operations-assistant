@@ -28,7 +28,7 @@ def _first_amount(entities: dict) -> float | None:
     return float(amounts[0]) if amounts else None
 
 
-def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult) -> AgentOutput:
+def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult, *, revise: bool = False) -> AgentOutput:
     observations: list[dict[str, Any]] = []
 
     lookup = execute_tool(db, case_id=case.case_id, tool_name="lookup_status",
@@ -52,15 +52,28 @@ def handle(db: Session, case: CaseState, ops_event: dict, triage: TriageResult) 
                                         reasoning="No matching failed transaction found in the system of record; safer to route than guess.")
             return AgentOutput(proposal=proposal, observations=observations, tool_calls_used=1)
 
+        refund_amount = float(txn["amount_inr"])
+        reasoning = (f"Transaction {txn['txn_id']} was charged (₹{txn['amount_inr']}) but failed at the gateway "
+                     f"(decline_code={txn['decline_code']}) and was never fulfilled — a full refund matches REFUND-POL-2.0.")
+
+        if revise:
+            # Verifier flagged a mismatch between the full transaction amount
+            # and what the customer's own message named — re-derive from the
+            # same source the verifier used, rather than parsing its
+            # natural-language hint (docs/architecture.md §6 scenario 4).
+            stated_amounts = entities.get("amounts_inr") or []
+            if stated_amounts and min(stated_amounts) < refund_amount:
+                refund_amount = min(stated_amounts)
+                reasoning = (f"Revised down from the full transaction amount (₹{txn['amount_inr']}) to "
+                             f"₹{refund_amount} per the verifier's feedback — the customer's own message only "
+                             f"named this amount as disputed, and there's no evidence the whole transaction failed.")
+
         proposal = {
             "proposal_id": generate_id("prop"), "case_id": case.case_id, "domain": case.domain.value,
             "action_type": "issue_refund",
-            "args": {"txn_id": txn["txn_id"], "amount_inr": float(txn["amount_inr"]), "customer_ref": case.customer_ref},
+            "args": {"txn_id": txn["txn_id"], "amount_inr": refund_amount, "customer_ref": case.customer_ref},
             "evidence": [{"type": "transaction", "ref": txn["txn_id"]}],
-            "confidence": 0.95, "proposed_by": NAME,
-            "reasoning": (f"Transaction {txn['txn_id']} was charged (₹{txn['amount_inr']}) but failed at the gateway "
-                          f"(decline_code={txn['decline_code']}) and was never fulfilled — a full refund matches "
-                          f"REFUND-POL-2.0."),
+            "confidence": 0.95, "proposed_by": NAME, "reasoning": reasoning,
         }
         return AgentOutput(proposal=proposal, observations=observations, tool_calls_used=1)
 
