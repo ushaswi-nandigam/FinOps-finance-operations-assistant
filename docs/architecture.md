@@ -3,6 +3,17 @@
 **Track:** AI Build 2026 · Agentic Financial Ops Assistant
 **Purpose of this document:** a build-ready specification. Every layer below states what it does, what it must not do, its inputs/outputs, and the concrete tech to use. Hand this to a coding agent section by section.
 
+> **This is the original planning spec, kept as-is for reference.** The
+> as-built system deliberately diverges from it in several places — MySQL
+> instead of Supabase/Postgres, a hand-rolled orchestrator instead of
+> LangGraph, no Redis/Celery, regex PII recognisers instead of Presidio, no
+> MCP servers, React instead of Next.js. **Read `docs/LEARN.md` for what was
+> actually built, why each divergence was made, and the real bugs found
+> along the way** — it's the accurate description of the running system.
+> This document remains useful for the *reasoning* behind each layer's
+> design (the tier tables, the hard gates, the golden demo scenarios in §6
+> are all still exactly what was built).
+
 ---
 
 ## 0. The One-Line Design Thesis

@@ -4,7 +4,7 @@ incrementally as each build step lands (see docs/architecture.md §8)."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.api.routers import audit, ingress
+from services.api.routers import approvals, audit, auth, cases, compliance, dashboard, ingress
 
 app = FastAPI(
     title="Agentic FinOps Assistant API",
@@ -22,6 +22,11 @@ app.add_middleware(
 
 app.include_router(ingress.router)
 app.include_router(audit.router)
+app.include_router(cases.router)
+app.include_router(approvals.router)
+app.include_router(compliance.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")

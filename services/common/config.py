@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = Field(default="")
     GOOGLE_API_KEY: str = Field(default="")
 
-    # Tier Mapping
-    MODEL_TIER_FRONTIER: str = Field(default="gemini-2.0-flash")
-    MODEL_TIER_MID: str = Field(default="gemini-2.0-flash-lite")
-    MODEL_TIER_FAST: str = Field(default="ollama/qwen2.5:3b")
-    EMBEDDING_MODEL: str = Field(default="text-embedding-004")
+    # Tier Mapping — "-latest" rolling aliases rather than dated snapshots
+    # (e.g. gemini-2.0-flash-lite), because Google zeroes free-tier quota on
+    # older dated models before the alias catches up; see docs/LEARN.md.
+    MODEL_TIER_FRONTIER: str = Field(default="gemini-flash-latest")
+    MODEL_TIER_MID: str = Field(default="gemini-flash-lite-latest")
+    EMBEDDING_MODEL: str = Field(default="BAAI/bge-small-en-v1.5")
 
     # Database (MySQL 8 — sync SQLAlchemy + PyMySQL, see docs/LEARN.md for why)
     DATABASE_URL: str = Field(

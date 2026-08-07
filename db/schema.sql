@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS cases (
     max_tool_calls    INT NOT NULL DEFAULT 6,
     revisions         INT NOT NULL DEFAULT 0,
     max_revisions     INT NOT NULL DEFAULT 3,
-    triage_stage      VARCHAR(16) DEFAULT NULL,
+    triage_stage      VARCHAR(32) DEFAULT NULL,  -- e.g. "T3_LLM_UNAVAILABLE" (19 chars) exceeds a 16-char column
     error             TEXT DEFAULT NULL,
     created_at        DATETIME NOT NULL,
     updated_at        DATETIME NOT NULL,
@@ -196,7 +196,10 @@ CREATE TABLE IF NOT EXISTS action_proposals (
     proposed_by       VARCHAR(64) NOT NULL,
     reasoning         TEXT NOT NULL,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
+    -- case_id is a loose correlation id, not a hard FK to cases (same
+    -- reasoning as decision_records below): it lets the policy engine, tool
+    -- layer, and audit ledger be built and tested independently of the
+    -- orchestrator's case state machine.
     INDEX idx_proposals_case (case_id)
 ) ENGINE=InnoDB;
 
@@ -212,7 +215,6 @@ CREATE TABLE IF NOT EXISTS risk_decisions (
     required_approvers INT NOT NULL DEFAULT 0,
     requires_distinct_approvers BOOLEAN NOT NULL DEFAULT FALSE,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
     INDEX idx_risk_decisions_proposal (proposal_id)
 ) ENGINE=InnoDB;
 
@@ -231,7 +233,6 @@ CREATE TABLE IF NOT EXISTS approvals (
     sla_deadline      DATETIME NOT NULL,
     decided_at        DATETIME DEFAULT NULL,
     created_at        DATETIME NOT NULL,
-    FOREIGN KEY (case_id) REFERENCES cases(case_id),
     UNIQUE KEY uq_proposal_approver (proposal_id, approver_id),
     INDEX idx_approvals_status (status)
 ) ENGINE=InnoDB;
@@ -250,8 +251,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     status            ENUM('DRY_RUN','SUCCESS','FAILED','ROLLED_BACK') NOT NULL DEFAULT 'SUCCESS',
     result            JSON NOT NULL,
     created_at        DATETIME NOT NULL,
-    UNIQUE KEY uq_idempotency_key (idempotency_key),
-    FOREIGN KEY (case_id) REFERENCES cases(case_id)
+    UNIQUE KEY uq_idempotency_key (idempotency_key)
 ) ENGINE=InnoDB;
 
 -- =====================================================================
@@ -271,12 +271,18 @@ CREATE TABLE IF NOT EXISTS decision_records (
     actor_name        VARCHAR(64) NOT NULL,
     actor_model       VARCHAR(64) DEFAULT NULL,
     actor_version     VARCHAR(16) DEFAULT NULL,
-    action            JSON NOT NULL,
+    -- action/evidence/matched_rules/verifier are TEXT, not MySQL's native
+    -- JSON type, deliberately: MySQL's JSON type silently re-serialises
+    -- values on storage (float formatting in particular can shift), so a
+    -- hash computed at write time over the original JSON string stops
+    -- matching a hash recomputed after reading the row back. TEXT returns
+    -- the exact bytes that were written — see docs/LEARN.md §9.
+    action            TEXT NOT NULL,
     outcome           VARCHAR(32) NOT NULL,
     reason_plain      TEXT NOT NULL,
-    evidence          JSON NOT NULL,
-    matched_rules     JSON NOT NULL,
-    verifier          JSON NOT NULL,
+    evidence          TEXT NOT NULL,
+    matched_rules     TEXT NOT NULL,
+    verifier          TEXT NOT NULL,
     cost_stage        VARCHAR(16) NOT NULL,
     cost_tokens_in    INT NOT NULL DEFAULT 0,
     cost_tokens_out   INT NOT NULL DEFAULT 0,

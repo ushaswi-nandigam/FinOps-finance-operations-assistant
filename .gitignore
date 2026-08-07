@@ -45,3 +45,5 @@ services/*/label_encoder.pkl
 .mypy_cache/
 node_modules/
 web/dist/
+web/*.tsbuildinfo
+evals/report.json

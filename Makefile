@@ -27,8 +27,14 @@ seed:
 load-seed:
 	python scripts/load_seed.py
 
+index-policies:
+	python scripts/index_policies.py
+
 test:
 	pytest tests/ --cov=services --cov-report=term-missing
+
+golden-set:
+	python evals/generate_golden_set.py
 
 eval:
 	python evals/runner.py

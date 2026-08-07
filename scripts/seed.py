@@ -50,8 +50,28 @@ INJECTION_ATTEMPTS = [
 ]
 
 
+INTERNAL_OPS_SYSTEM_CUSTOMER_REF = "cus_tok_internal"
+
+
 def generate_customers(count: int = 300) -> list[dict]:
-    customers = []
+    customers = [{
+        # Not a real customer — the identity internal-ops requests (merchant
+        # onboarding, access requests, ...) route through, since those
+        # aren't scoped to any one customer but still need a valid
+        # customer_ref for the policy engine's unknown-customer hard gate
+        # (CUSTOMER-GATE-1) to pass. VERIFIED/unflagged so it never trips
+        # any of the other gates either.
+        "customer_ref": INTERNAL_OPS_SYSTEM_CUSTOMER_REF,
+        "name": "Internal Ops System Account",
+        "email": "internal-ops@finops.internal",
+        "phone": "0000000000",
+        "tier": "STANDARD",
+        "tenure_months": 999,
+        "kyc_status": "VERIFIED",
+        "is_flagged": False,
+        "is_minor": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }]
     tiers = ["STANDARD", "SILVER", "GOLD", "PLATINUM"]
     kyc_statuses = ["VERIFIED", "VERIFIED", "VERIFIED", "PENDING", "REJECTED"]
 
@@ -77,8 +97,19 @@ def generate_transactions(customers: list[dict], count: int = 8000) -> list[dict
     merchant_categories = ["ECOM", "TRAVEL", "UTILITIES", "FOOD", "ENTERTAINMENT", "FINANCE"]
     failure_codes = ["INSUFFICIENT_FUNDS", "CARD_EXPIRED", "GATEWAY_TIMEOUT", "BANK_DECLINED", "NONE"]
 
-    # A handful of shared devices/IPs so the fraud linkage graph (networkx)
-    # has real connected components to find, not just noise.
+    # Each customer gets 1-2 *personal* devices (deterministic, per-customer
+    # namespace) so unrelated customers essentially never collide on
+    # device_id by chance. A handful of shared "ring" devices are then
+    # deliberately reused across a small group of customers — that
+    # deliberate overlap is what services/fraud_ml/linkage.py's connected-
+    # components search is meant to find. Without personal device
+    # namespacing, a small shared pool (e.g. 1500 devices across 8000 txns)
+    # produces so much incidental cross-customer collision that the fraud
+    # ring is indistinguishable from noise in the graph.
+    personal_devices = {
+        c["customer_ref"]: [f"dev_p{i}_{j}" for j in range(random.randint(1, 2))]
+        for i, c in enumerate(customers)
+    }
     fraud_ring_devices = [f"dev_ring_{i}" for i in range(6)]
     fraud_ring_customers = random.sample(customers, k=8)
 
@@ -94,7 +125,7 @@ def generate_transactions(customers: list[dict], count: int = 8000) -> list[dict
             days=random.randint(0, 30), hours=random.randint(0, 23), minutes=random.randint(0, 59),
         )
 
-        device_id = f"dev_{random.randint(1, 1500)}"
+        device_id = random.choice(personal_devices[cust["customer_ref"]])
         if cust in fraud_ring_customers and random.random() < 0.6:
             device_id = random.choice(fraud_ring_devices)
             is_fraud = True
@@ -350,11 +381,12 @@ def main() -> None:
     print("Generating synthetic universe for FinOps Assistant...")
 
     customers = generate_customers(300)
-    txns = generate_transactions(customers, 8000)
-    tickets = generate_tickets(customers, 400)
-    transcripts = generate_transcripts(customers, 40)
-    disputes = generate_disputes(customers, txns, 120)
-    fraud_cases = generate_fraud_cases(customers, txns, 80)
+    real_customers = [c for c in customers if c["customer_ref"] != INTERNAL_OPS_SYSTEM_CUSTOMER_REF]
+    txns = generate_transactions(real_customers, 8000)
+    tickets = generate_tickets(real_customers, 400)
+    transcripts = generate_transcripts(real_customers, 40)
+    disputes = generate_disputes(real_customers, txns, 120)
+    fraud_cases = generate_fraud_cases(real_customers, txns, 80)
     policies = generate_policies()
     sops = generate_sops()
     workflows = generate_internal_ops_workflows(60)
