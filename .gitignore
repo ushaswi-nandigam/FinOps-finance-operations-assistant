@@ -45,5 +45,6 @@ services/*/label_encoder.pkl
 .mypy_cache/
 node_modules/
 web/dist/
+web/.vite/
 web/*.tsbuildinfo
 evals/report.json
