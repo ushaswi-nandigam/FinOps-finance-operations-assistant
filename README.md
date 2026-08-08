@@ -122,6 +122,8 @@ See `docs/LEARN.md` §1 for why each of these was chosen over the original spec'
 finops-agent/
 ├── docker-compose.yml          # optional local convenience (MySQL + API + web) — not the deployment path
 ├── Makefile                    # up, migrate, seed, load-seed, index-policies, test, eval, demo
+├── start_finops.bat            # Windows one-click launch (API + web + browser)
+├── stop_finops.bat             # Windows one-click shutdown
 ├── db/schema.sql               # MySQL DDL, applied by scripts/migrate.py
 ├── data/
 │   ├── policies/ sops/         # placeholders — real corpus is generated (see below)
@@ -198,6 +200,14 @@ npm install
 npm run dev
 # open http://localhost:5173 — log in as approver_alice / demo1234 (see scripts/seed_users.py for all demo accounts)
 ```
+
+### Windows one-click launch
+
+If you're on Windows and just want a single-click run:
+
+1. Double-click `start_finops.bat` in the repository root.
+2. It installs frontend dependencies on first run, starts the API (`uvicorn`) and web app (`npm run dev`) in two windows, then opens `http://localhost:5173`.
+3. To stop everything, double-click `stop_finops.bat`.
 
 ### Verify it all works
 
