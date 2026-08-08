@@ -77,6 +77,7 @@ export default function LiveQueue() {
               <tr key={c.case_id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 font-mono text-xs">
                   <Link to={`/cases/${c.case_id}`} className="text-sky-600 hover:underline">{c.case_id.slice(0, 18)}...</Link>
+                  <span className="ml-2 text-slate-400">{c.customer_ref}</span>
                 </td>
                 <td className="px-4 py-2"><DomainBadge domain={c.domain} /></td>
                 <td className="px-4 py-2"><StatusBadge status={c.status} /></td>
