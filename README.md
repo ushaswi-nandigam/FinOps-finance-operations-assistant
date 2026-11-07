@@ -224,3 +224,10 @@ python scripts/demo_driver.py    # the 5 golden-path scenarios from docs/archite
 <p align="center">
   <sub>Built for AI Build 2026 · Agentic Financial Ops Assistant Track</sub>
 </p>
+
+| Agent | File | Tools/Scopes | LLM? | What it does |
+|---|---|---|---|---|
+| **Support** | `agents/support.py` | `crm:read`, `payments:read`, `casemgmt:write`, `crm:write` — no `payments:write` | **No** | Answers status/KYC queries with templated replies from the system of record; routes unknown intents to an internal task. Cannot call `issue_refund` by construction (`support.py:23`). |
+| **Payments** | `agents/payments.py` | Includes `payments:write` | **No** | Diagnoses failed txn → proposes `issue_refund` (full amount, or revised down), `waive_fee`, `unblock_card`; chargeback/dispute/cashback intents → create internal task (routed to human, not guessed) (`payments.py:106`). |
+| **Fraud** | `agents/fraud.py` | `crm:read`, `payments:read`, `casemgmt:write`, `payments:write` | **Yes, only to narrate** | Scores txn via LightGBM+SHAP (`scorer.py:66`) + device-ring graph (`linkage.py:29`). Score decides: `>0.7` → `place_fraud_hold`, `0.4–0.7` → review task, `<0.4` → close benign. LLM writes a plain-language memo; template fallback if it fails (`fraud.py:49`). |
+| **Internal Ops** | `agents/internal_ops.py` | `casemgmt:*` | **No** | Matches an internal request (limit enhancement, onboarding...) to a workflow-catalogue entry and proposes `create_internal_task` — hands off to a human queue, never acts directly (`internal_ops.py:40`). |
